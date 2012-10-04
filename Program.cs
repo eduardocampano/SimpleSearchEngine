@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -13,11 +14,16 @@ namespace SimpleSearchEngine
 			var searchEngine = new SearchEngine<Movie>();
 
 			var documents = GetDocuments();
-			
 			searchEngine.Index(documents, x => x.Fields.Title);
-			var documentsForSimpleSearch = documents.Where(x => !string.IsNullOrWhiteSpace(x.Fields.Title))
-													.Select(x => new { Index = x.Fields.Title.Split(new [] { ' ', '\n', '\r', '\t', '-' }, StringSplitOptions.RemoveEmptyEntries), Movie = x })
-													.ToList();
+
+			var compare = args.Any() && args[0].Equals("compare", StringComparison.InvariantCultureIgnoreCase);
+			List<LinqIndexEntry> linqIndex = null;
+			if (compare)
+			{
+				linqIndex = documents.Where(x => !string.IsNullOrWhiteSpace(x.Fields.Title))
+														.Select(x => new LinqIndexEntry() { Words = x.Fields.Title.Split(new[] { ' ', '\n', '\r', '\t', '-' }, StringSplitOptions.RemoveEmptyEntries), Movie = x })
+														.ToList();
+			}
 
 			while (true)
 			{
@@ -34,24 +40,27 @@ namespace SimpleSearchEngine
 				var searchResults = searchEngine.Search(searchTerm);
 
 				foreach (var result in searchResults)
-					Console.WriteLine("*** Matched {0}", result.Fields.Title);
+					Console.WriteLine("*** {0}", result.Fields.Title);
 
 				Console.WriteLine("{0} results ({1} seconds)", searchResults.Count(), searchResults.Elapsed.TotalSeconds.ToString("0.00####################"));
 				Console.WriteLine();
 				
 				// ---------- LINQ SEARCH ----------------
-				Console.WriteLine("Using LINQ");
-				Console.WriteLine("==========");
+				if (compare)
+				{
+					Console.WriteLine("Using LINQ");
+					Console.WriteLine("==========");
 
-				var stopwatch = Stopwatch.StartNew();
-				var results = documentsForSimpleSearch.Where(x => x.Index.Any(e => e.StartsWith(searchTerm, StringComparison.InvariantCultureIgnoreCase))).ToList();
-				stopwatch.Stop();
+					var stopwatch = Stopwatch.StartNew();
+					var results = linqIndex.Where(x => x.Words.Any(e => e.StartsWith(searchTerm, StringComparison.InvariantCultureIgnoreCase))).ToList();
+					stopwatch.Stop();
 
-				foreach (var result in results)
-					Console.WriteLine("*** Matched {0}", result.Movie.Fields.Title);
+					foreach (var result in results)
+						Console.WriteLine("*** {0}", result.Movie.Fields.Title);
 
-				Console.WriteLine("{0} results ({1} seconds)", results.Count(), stopwatch.Elapsed.TotalSeconds.ToString("0.00####################"));
-				Console.WriteLine();
+					Console.WriteLine("{0} results ({1} seconds)", results.Count(), stopwatch.Elapsed.TotalSeconds.ToString("0.00####################"));
+					Console.WriteLine();
+				}
 			}
 		}
 
@@ -59,6 +68,12 @@ namespace SimpleSearchEngine
 		{
 			var json = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "moviedata.json"));
 			return JsonConvert.DeserializeObject<Movie[]>(json);
+		}
+
+		class LinqIndexEntry
+		{
+			public string[] Words { get; set; }
+			public Movie Movie { get; set; }
 		}
 
 		class Movie
